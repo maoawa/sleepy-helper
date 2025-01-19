@@ -1,3 +1,4 @@
 */__pycache__
 macos-reporter/config.py
 windows-reporter/config.py
+.DS_Store

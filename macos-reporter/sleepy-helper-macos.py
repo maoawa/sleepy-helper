@@ -3,9 +3,12 @@ import time
 import signal
 import requests
 import objc
+import urllib3
 from AppKit import NSWorkspace
 from Foundation import NSAppleScript
 from config import HASS_URL, HASS_TOKEN, UPDATE_INTERVAL, IGNORE_SSL_ERRORS, ATTRIBUTES
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 HEADERS = {
     "Authorization": f"Bearer {HASS_TOKEN}",
@@ -36,7 +39,7 @@ def get_combined_app_window_name():
     app_name = get_frontmost_app_name()
     window_name = get_frontmost_window_name()
     if window_name and app_name != window_name:
-        return f"{app_name} — {window_name}"
+        return f"{window_name} — {app_name}"
     return app_name
 
 def update_hass_state(state):

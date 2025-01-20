@@ -1,0 +1,163 @@
+esphome:
+  name: sleepy-helper
+  friendly_name: Sleepy Helper
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: ERROR
+
+# HASS API
+api:
+  id: api_instance
+  encryption:
+    key: "?"
+  on_client_connected:
+    then:
+      - lambda: |-
+          id(main_display).turn_on();
+          id(gpio2_led).turn_on();
+      - logger.log: "Connected to Home Assistant!"
+  on_client_disconnected:
+    then:
+      - lambda: |-
+          id(gpio2_led).turn_off();
+
+# OTA UPDATE
+ota:
+  - platform: esphome
+    password: "?"
+
+# Wi-Fi
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Sleepy-Helper"
+    password: "?"
+
+captive_portal:
+
+# GLOBAL VARIABLES
+globals:
+  - id: total_requests
+    type: int
+    initial_value: "0"
+  - id: daily_requests
+    type: int
+    initial_value: "0"
+
+# HTTP REQUEST
+http_request:
+  useragent: esphome
+  verify_ssl: false
+
+interval:
+  - interval: 5s
+    then:
+      - http_request.get:
+          url: https://sleepy.example.com/states/statistics/
+          capture_response: true
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - lambda: |-
+                        json::parse_json(body, [](JsonObject root) -> bool {
+                            if (root["total"] && root["daily"]) {
+                                id(total_requests) = root["total"].as<int>();
+                                id(daily_requests) = root["daily"].as<int>();
+                                return true;
+                            } else {
+                                ESP_LOGI("HTTP", "Missing 'total' or 'daily' keys in JSON response!");
+                                return false;
+                            }
+                        });
+                  else:
+                    - logger.log:
+                        format: "HTTP Error: Status %d, Body: %s"
+                        args: ['response->status_code', 'body.c_str()']
+
+# I2C FOR DISPLAY
+i2c:
+  sda: 21
+  scl: 22
+  scan: false
+  frequency: 400kHz
+
+# MAIN DISPLAY
+display:
+  - platform: ssd1306_i2c
+    model: "SH1106 128x64"
+    address: 0x3C
+    id: main_display
+    brightness: 1.0
+    lambda: |-
+      if (!id(api_instance).is_connected()) {
+        it.printf(64, 20, id(Regular), TextAlign::CENTER, "Connecting to");
+        it.printf(64, 36, id(Regular), TextAlign::CENTER, "Home Assistant");
+      } else {
+        it.printf(64, 16, id(Bold), TextAlign::CENTER, "Project Sleepy");
+        it.printf(64, 32, id(Regular), TextAlign::CENTER, "State: %s", id(sleepy_state).state.c_str());
+        it.printf(64, 48, id(Regular), TextAlign::CENTER, "Web: %d | %d", id(total_requests), id(daily_requests));
+      }
+
+# FONTS
+font:
+  - file: "fonts/Roboto-Regular.ttf"
+    id: Regular
+    size: 12
+  - file: "fonts/Roboto-Bold.ttf"
+    id: Bold
+    size: 16
+
+# HASS STATE SENSOR
+text_sensor:
+  - platform: homeassistant
+    name: "Sleepy State"
+    id: sleepy_state
+    entity_id: input_text.sleepy_state
+
+# GPIO2 LED
+output:
+  - platform: gpio
+    pin: GPIO2
+    id: gpio2_led
+
+# PHOTORESISTOR
+binary_sensor:
+  - platform: homeassistant
+    entity_id: binary_sensor.sleepy_helper_sensors_light_sensor
+    id: light_sensor
+    on_state:
+      then:
+        - if:
+            condition:
+              binary_sensor.is_on: light_sensor
+            then:
+              - logger.log: "Light received, turning on display"
+              - lambda: |-
+                  id(main_display).turn_on();
+            else:
+              - logger.log: "Darkness received, turning off display"
+              - lambda: |-
+                  id(main_display).turn_off();
+
+# SPEAKER
+i2s_audio:
+  id: audio_output
+  i2s_lrclk_pin: GPIO26
+  i2s_bclk_pin: GPIO25
+
+media_player:
+  - platform: i2s_audio
+    id: speaker
+    name: "Speaker"
+    dac_type: external
+    i2s_dout_pin: GPIO33
+    mode: mono

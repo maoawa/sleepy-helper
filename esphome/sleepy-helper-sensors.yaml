@@ -1,0 +1,66 @@
+# TO BE COMPLETED...
+
+esphome:
+  name: sleepy-helper-sensors
+  friendly_name: Sleepy Helper (Sensors)
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: INFO
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "?"
+  on_client_connected:
+    then:
+      - lambda: |-
+          id(gpio2_led).turn_on();
+      - logger.log: "Connected to Home Assistant!"
+  on_client_disconnected:
+    then:
+      - lambda: |-
+          id(gpio2_led).turn_off();
+
+ota:
+  - platform: esphome
+    password: "?"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Sleepy-Helper-Sensors"
+    password: "?"
+
+captive_portal:
+
+# GPIO2 LED
+output:
+  - platform: gpio
+    pin: GPIO2
+    id: gpio2_led
+
+# Light Sensor
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO27
+      inverted: true
+    name: "Light Sensor"
+    id: light_sensor
+    filters:
+      - delayed_on_off: 3000ms
+    on_state:
+      then:
+        - logger.log: "Light detected."
+    on_release:
+      then:
+        - logger.log: "Light not detected."

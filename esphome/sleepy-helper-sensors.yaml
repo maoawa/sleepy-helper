@@ -1,66 +1,56 @@
-# TO BE COMPLETED...
-
 esphome:
-  name: sleepy-helper-sensors
-  friendly_name: Sleepy Helper (Sensors)
+  name: sleepy-sensor
+  friendly_name: Sleepy Sensor
 
 esp32:
   board: esp32dev
   framework:
     type: arduino
 
-# Enable logging
 logger:
-  level: INFO
 
-# Enable Home Assistant API
 api:
   encryption:
-    key: "?"
-  on_client_connected:
-    then:
-      - lambda: |-
-          id(gpio2_led).turn_on();
-      - logger.log: "Connected to Home Assistant!"
-  on_client_disconnected:
-    then:
-      - lambda: |-
-          id(gpio2_led).turn_off();
+    key: "" # 修改成自己的 API KEY
 
 ota:
   - platform: esphome
-    password: "?"
+    password: "" # 修改成自己的 OTA 密码
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "Sleepy-Helper-Sensors"
-    password: "?"
+    ssid: "Sleepy-Sensor Fallback Hotspot"
+    password: "" # 设定自己的备份热点密码
 
-captive_portal:
+i2c:
+  sda: 21
+  scl: 22
 
-# GPIO2 LED
-output:
-  - platform: gpio
-    pin: GPIO2
-    id: gpio2_led
+sensor:
+  - platform: aht10
+    temperature:
+      name: "AHT20 Temperature"
+      accuracy_decimals: 1
+    humidity:
+      name: "AHT20 Humidity"
+      accuracy_decimals: 1
+    update_interval: 10s
 
-# Light Sensor
+  - platform: bmp280_i2c
+    pressure:
+      name: "BMP280 Pressure"
+      accuracy_decimals: 1
+    update_interval: 10s
+
 binary_sensor:
   - platform: gpio
     pin:
       number: GPIO27
+      mode: INPUT_PULLUP
       inverted: true
-    name: "Light Sensor"
-    id: light_sensor
+    name: "Light Sensor State"
     filters:
-      - delayed_on_off: 3000ms
-    on_state:
-      then:
-        - logger.log: "Light detected."
-    on_release:
-      then:
-        - logger.log: "Light not detected."
+      - delayed_on_off: 3s

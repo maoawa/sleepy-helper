@@ -278,7 +278,7 @@ ATTRIBUTES = {
   <tr>
     <td rowspan="4">温湿度大气压传感器</td>
     <td>SDA</td>
-    <td>GPIO33 (D31)</td>
+    <td>GPIO33 (D33)</td>
     <td rowspan="2">传输数据</td>
   </tr>
   <tr>

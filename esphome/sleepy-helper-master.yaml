@@ -1,0 +1,277 @@
+esphome:
+  name: sleepy-helper
+  friendly_name: Sleepy Helper
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: ERROR
+
+# HASS API
+api:
+  id: api_instance
+  encryption:
+    key: "" # 修改成你的 HASS 密钥
+  on_client_connected:
+    then:
+      - lambda: |-
+          id(gpio2_led).turn_on();
+      - logger.log: "Connected to Home Assistant!"
+  on_client_disconnected:
+    then:
+      - lambda: |-
+          id(gpio2_led).turn_off();
+
+# OTA UPDATE
+ota:
+  - platform: esphome
+    password: "" # 修改成你的 OTA 密钥
+
+# Wi-Fi
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Sleepy-Helper Fallback Hotspot"
+    password: "" # 修改成你的备份热点密码
+
+captive_portal:
+
+# GLOBAL VARIABLES
+globals:
+  - id: total_requests
+    type: int
+    initial_value: "0"
+  - id: daily_requests
+    type: int
+    initial_value: "0"
+
+# HTTP REQUEST
+http_request:
+  useragent: esphome/sleepy-helper
+  verify_ssl: false # 根据需要修改
+
+interval:
+  - interval: 10s
+    then:
+      - http_request.get:
+          url: https://sleepy.example.com/states/statistics/ # 统计接口，根据需要修改
+          capture_response: true
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - lambda: |-
+                        json::parse_json(body, [](JsonObject root) -> bool {
+                            if (root["total"] && root["daily"]) {
+                                id(total_requests) = root["total"].as<int>();
+                                id(daily_requests) = root["daily"].as<int>();
+                                return true;
+                            } else {
+                                ESP_LOGI("HTTP", "Missing 'total' or 'daily' keys in JSON response!");
+                                return false;
+                            }
+                        });
+                  else:
+                    - logger.log:
+                        level: ERROR
+                        format: "HTTP Error: Status %d, Body: %s"
+                        args: ['response->status_code', 'body.c_str()']
+
+# I2C FOR DISPLAY
+i2c:
+  - id: i2c_display
+    sda: 21
+    scl: 22
+    frequency: 400kHz
+  - id: i2c_sensors
+    sda: 33
+    scl: 32
+
+# MAIN DISPLAY
+display:
+  - platform: ssd1306_i2c
+    model: "SH1106 128x64"
+    address: 0x3C
+    id: main_display
+    i2c_id: i2c_display
+    brightness: 1.0
+    lambda: |-
+      if (!id(api_instance).is_connected()) {
+        it.printf(64, 20, id(Regular), TextAlign::CENTER, "Connecting to");
+        it.printf(64, 36, id(Regular), TextAlign::CENTER, "Home Assistant");
+      } else {        
+        bool show_private_mode = id(private_mode).state;
+        bool show_star = !(id(message_text).state.empty() || id(message_text).state == "unavailable" || id(message_text).state == "EXPIRED");
+
+        if (show_private_mode) {
+          it.printf(64, 8, id(Bold), TextAlign::CENTER, "Project Sleepy");
+          it.printf(64, 24, id(Regular), TextAlign::CENTER, "State: %s", id(mars_state).state.c_str());
+          it.printf(64, 40, id(Regular), TextAlign::CENTER, "%sWeb: %d | %d", show_star ? "* " : "", id(total_requests), id(daily_requests));
+          it.printf(64, 56, id(Regular), TextAlign::CENTER, "Private Mode Enabled");
+        } else {
+          it.printf(64, 16, id(Bold), TextAlign::CENTER, "Project Sleepy");
+          it.printf(64, 32, id(Regular), TextAlign::CENTER, "State: %s", id(mars_state).state.c_str());
+          it.printf(64, 48, id(Regular), TextAlign::CENTER, "%sWeb: %d | %d", show_star ? "* " : "", id(total_requests), id(daily_requests));
+        }
+      }
+
+# FONTS
+font:
+  - file: "fonts/Roboto-Regular.ttf"
+    id: Regular
+    size: 12
+  - file: "fonts/Roboto-Bold.ttf"
+    id: Bold
+    size: 16
+
+
+text_sensor:
+  # MARS STATE
+  - platform: homeassistant
+    name: "Mars State"
+    id: mars_state
+    entity_id: input_text.mars_state
+
+  # MESSAGE
+  - platform: homeassistant
+    name: "Message"
+    id: message_text
+    entity_id: input_text.message
+
+# GPIO2 LED
+output:
+  - platform: gpio
+    pin: GPIO2
+    id: gpio2_led
+
+
+binary_sensor:
+  - platform: homeassistant
+    name: "Private Mode"
+    id: private_mode
+    entity_id: input_boolean.private_mode
+    
+  - platform: gpio
+    pin:
+      number: 27
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Light Sensor"
+    id: light_sensor
+    filters:
+      - delayed_on_off: 3s
+    on_state:
+      then:
+        - if:
+            condition:
+              binary_sensor.is_on: light_sensor
+            then:
+              - logger.log: "Light received, turning on display"
+              - lambda: |-
+                  id(main_display).turn_on();
+            else:
+              - logger.log: "Darkness received, turning off display"
+              - lambda: |-
+                  id(main_display).turn_off();
+
+# KEYBOARD
+  - platform: gpio
+    pin:
+      number: 16
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Button 1"
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      - homeassistant.service:
+          service: input_boolean.toggle
+          data:
+            entity_id: input_boolean.awake
+      - logger.log: "Button 1 pressed, toggling input_boolean.awake"
+    internal: true
+
+  - platform: gpio
+    pin:
+      number: 17
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Button 2"
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      - homeassistant.service:
+          service: input_boolean.toggle
+          data:
+            entity_id: input_boolean.private_mode
+      - logger.log: "Button 2 pressed, toggling input_boolean.private_mode"
+    internal: true
+
+  - platform: gpio
+    pin:
+      number: 18
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Button 3"
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      - logger.log: "Button 3 pressed, temporarily lighting up display"
+      - lambda: |-
+          id(main_display).turn_on();
+      - delay: 5s
+      - if:
+          condition:
+            binary_sensor.is_off: light_sensor
+          then:
+            - logger.log: "Light sensor is OFF, turning off display"
+            - lambda: |-
+                id(main_display).turn_off();
+          else:
+            - logger.log: "Light sensor is ON, keeping display on"
+    internal: true
+
+  - platform: gpio
+    pin:
+      number: 19
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Button 4"
+    filters:
+      - delayed_on: 50ms
+    on_multi_click:
+      - timing:
+          - ON for at most 500ms
+          - OFF for at most 1000ms
+          - ON for at most 500ms
+        then:
+          - homeassistant.service:
+              service: input_button.press
+              data:
+                entity_id: input_button.message_expire
+          - logger.log: "Button 4 double-clicked, expiring message (pressed input_button.message_expire)"
+    internal: true
+
+sensor:
+  - platform: aht10
+    i2c_id: i2c_sensors
+    temperature:
+      name: "Room Temperature"
+      accuracy_decimals: 1
+    humidity:
+      name: "Room Humidity"
+      accuracy_decimals: 1
+    update_interval: 10s
+
+  - platform: bmp280_i2c
+    i2c_id: i2c_sensors
+    pressure:
+      name: "Room Pressure"
+      accuracy_decimals: 1
+    update_interval: 10s

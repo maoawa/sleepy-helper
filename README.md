@@ -303,4 +303,4 @@ ATTRIBUTES = {
 
 *焊工有限，轻喷*
 
-**配置文件**: [./esphome/sleepy-helper-sensors.yaml](./esphome/sleepy-helper-sensors.yaml)
+**配置文件**: [./esphome/sleepy-helper-master.yaml](./esphome/sleepy-helper-master.yaml)

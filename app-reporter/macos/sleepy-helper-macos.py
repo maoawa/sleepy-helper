@@ -41,10 +41,15 @@ def get_frontmost_window_name():
 def get_combined_app_window_name():
     app_name = get_frontmost_app_name()
     window_name = get_frontmost_window_name()
+
+    if app_name == "loginwindow" or window_name == "loginwindow":
+        return "unavailable"
+
     if window_name and app_name in window_name:
         return window_name
     if window_name and app_name != window_name:
         return f"{window_name} — {app_name}"
+    
     return app_name
 
 def update_hass_state(state):

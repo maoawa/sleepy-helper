@@ -12,8 +12,8 @@
 (见 [**ESPHome**](#esphome) 部分)
 
 ## 前台程序报告器<a id="app-reporter"></a>
-macOS 版: [app-reporter/macos](./shortcuts/macos)  
-Windows 版: [app-reporter/windows](./shortcuts/windows)
+macOS 版: [app-reporter/macos](./app-reporter/macos/)  
+Windows 版: [app-reporter/windows](./app-reporter/windows)
 
 当 Python 脚本运行时，将会根据同目录下的 `config.py` 中设置的时间间隔定时像 Home Assistant 发送当前捕获焦点的程序名。  
 在 Home Assistant 中应有一个类型为 Text 的 Helper 来储存程序名，详见 [**HA 官方文档**](https://www.home-assistant.io/integrations/input_text/#:~:text=The%20preferred%20way%20to%20configure%20an%20input%20text,add%20button%20and%20then%20choose%20the%20Text%20option.)。以下假定这个 Helper 的实体 ID (Entity ID) 为 `input_text.my_device`
